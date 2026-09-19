@@ -1,0 +1,15 @@
+{
+  "frequent_spend_transactions_per_month": 3.0,
+  "frequent_spend_mean_amount_threshold": 200.0,
+  "monthly_fixed_min_months": 4,
+  "monthly_fixed_day_std_max": 3.0,
+  "monthly_fixed_amount_cv_max": 0.10,
+  "monthly_variable_min_months": 4,
+  "monthly_variable_day_std_max": 5.0,
+  "monthly_variable_amount_cv_max": 0.30,
+  "periodic_min_transactions": 2,
+  "periodic_gap_std_max": 15.0,
+  "periodic_gap_min_days": 45.0,
+  "confidence_data_completeness_weight": 0.4,
+  "confidence_pattern_consistency_weight": 0.6
+}

@@ -1,0 +1,303 @@
+[
+  {
+    "keyword": "AIS",
+    "match_type": "substring",
+    "category": "mobile",
+    "category_label_th": "ค่าโทรศัพท์ AIS",
+    "priority": 10
+  },
+  {
+    "keyword": "TRUE",
+    "match_type": "substring",
+    "category": "mobile",
+    "category_label_th": "ค่าโทรศัพท์ True",
+    "priority": 11
+  },
+  {
+    "keyword": "DTAC",
+    "match_type": "substring",
+    "category": "mobile",
+    "category_label_th": "ค่าโทรศัพท์ DTAC",
+    "priority": 12
+  },
+  {
+    "keyword": "3BB",
+    "match_type": "substring",
+    "category": "internet",
+    "category_label_th": "ค่าอินเทอร์เน็ต 3BB",
+    "priority": 20
+  },
+  {
+    "keyword": "TRUE ONLINE",
+    "match_type": "substring",
+    "category": "internet",
+    "category_label_th": "ค่าอินเทอร์เน็ต True Online",
+    "priority": 21
+  },
+  {
+    "keyword": "TOT",
+    "match_type": "substring",
+    "category": "internet",
+    "category_label_th": "ค่าอินเทอร์เน็ต TOT",
+    "priority": 22
+  },
+  {
+    "keyword": "NETFLIX",
+    "match_type": "substring",
+    "category": "subscription",
+    "category_label_th": "Netflix",
+    "priority": 30
+  },
+  {
+    "keyword": "SPOTIFY",
+    "match_type": "substring",
+    "category": "subscription",
+    "category_label_th": "Spotify",
+    "priority": 31
+  },
+  {
+    "keyword": "YOUTUBE PREMIUM",
+    "match_type": "substring",
+    "category": "subscription",
+    "category_label_th": "YouTube Premium",
+    "priority": 32
+  },
+  {
+    "keyword": "DISNEY",
+    "match_type": "substring",
+    "category": "subscription",
+    "category_label_th": "Disney+",
+    "priority": 33
+  },
+  {
+    "keyword": "APPLE MUSIC",
+    "match_type": "substring",
+    "category": "subscription",
+    "category_label_th": "Apple Music",
+    "priority": 34
+  },
+  {
+    "keyword": "LINE TV",
+    "match_type": "substring",
+    "category": "subscription",
+    "category_label_th": "LINE TV",
+    "priority": 35
+  },
+  {
+    "keyword": "VIKI",
+    "match_type": "substring",
+    "category": "subscription",
+    "category_label_th": "Viki",
+    "priority": 36
+  },
+  {
+    "keyword": "การไฟฟ้า",
+    "match_type": "substring",
+    "category": "utility",
+    "category_label_th": "ค่าไฟฟ้า",
+    "priority": 40
+  },
+  {
+    "keyword": "MEA",
+    "match_type": "substring",
+    "category": "utility",
+    "category_label_th": "ค่าไฟฟ้า MEA",
+    "priority": 41
+  },
+  {
+    "keyword": "PEA",
+    "match_type": "substring",
+    "category": "utility",
+    "category_label_th": "ค่าไฟฟ้า PEA",
+    "priority": 42
+  },
+  {
+    "keyword": "การประปา",
+    "match_type": "substring",
+    "category": "utility",
+    "category_label_th": "ค่าน้ำประปา",
+    "priority": 43
+  },
+  {
+    "keyword": "MWA",
+    "match_type": "substring",
+    "category": "utility",
+    "category_label_th": "ค่าน้ำประปา MWA",
+    "priority": 44
+  },
+  {
+    "keyword": "PWA",
+    "match_type": "substring",
+    "category": "utility",
+    "category_label_th": "ค่าน้ำประปา PWA",
+    "priority": 45
+  },
+  {
+    "keyword": "AIA",
+    "match_type": "substring",
+    "category": "insurance",
+    "category_label_th": "ประกัน AIA",
+    "priority": 50
+  },
+  {
+    "keyword": "FWD",
+    "match_type": "substring",
+    "category": "insurance",
+    "category_label_th": "ประกัน FWD",
+    "priority": 51
+  },
+  {
+    "keyword": "MUANG THAI",
+    "match_type": "substring",
+    "category": "insurance",
+    "category_label_th": "ประกันเมืองไทย",
+    "priority": 52
+  },
+  {
+    "keyword": "PRUDENTIAL",
+    "match_type": "substring",
+    "category": "insurance",
+    "category_label_th": "ประกัน Prudential",
+    "priority": 53
+  },
+  {
+    "keyword": "ALLIANZ",
+    "match_type": "substring",
+    "category": "insurance",
+    "category_label_th": "ประกัน Allianz",
+    "priority": 54
+  },
+  {
+    "keyword": "BANGKOK INSURANCE",
+    "match_type": "substring",
+    "category": "insurance",
+    "category_label_th": "ประกันกรุงเทพ",
+    "priority": 55
+  },
+  {
+    "keyword": "SHOPEE",
+    "match_type": "substring",
+    "category": "subscription",
+    "category_label_th": "Shopee",
+    "priority": 60
+  },
+  {
+    "keyword": "LAZADA",
+    "match_type": "substring",
+    "category": "subscription",
+    "category_label_th": "Lazada",
+    "priority": 61
+  },
+  {
+    "keyword": "GRAB",
+    "match_type": "substring",
+    "category": "subscription",
+    "category_label_th": "Grab",
+    "priority": 62
+  },
+  {
+    "keyword": "FOODPANDA",
+    "match_type": "substring",
+    "category": "subscription",
+    "category_label_th": "FoodPanda",
+    "priority": 63
+  },
+  {
+    "keyword": "LINE MAN",
+    "match_type": "substring",
+    "category": "subscription",
+    "category_label_th": "LINE MAN",
+    "priority": 64
+  },
+  {
+    "keyword": "TRUEMONEY",
+    "match_type": "substring",
+    "category": "subscription",
+    "category_label_th": "TrueMoney Wallet",
+    "priority": 65
+  },
+  {
+    "keyword": "RABBIT",
+    "match_type": "substring",
+    "category": "subscription",
+    "category_label_th": "Rabbit LINE Pay",
+    "priority": 66
+  },
+  {
+    "keyword": "KBANK",
+    "match_type": "substring",
+    "category": "loan_payment",
+    "category_label_th": "สินเชื่อ กสิกรไทย",
+    "priority": 70
+  },
+  {
+    "keyword": "SCB",
+    "match_type": "substring",
+    "category": "loan_payment",
+    "category_label_th": "สินเชื่อ ไทยพาณิชย์",
+    "priority": 71
+  },
+  {
+    "keyword": "BBL",
+    "match_type": "substring",
+    "category": "loan_payment",
+    "category_label_th": "สินเชื่อ กรุงเทพ",
+    "priority": 72
+  },
+  {
+    "keyword": "KRUNGSRI",
+    "match_type": "substring",
+    "category": "loan_payment",
+    "category_label_th": "สินเชื่อ กรุงศรี",
+    "priority": 73
+  },
+  {
+    "keyword": "TMB",
+    "match_type": "substring",
+    "category": "loan_payment",
+    "category_label_th": "สินเชื่อ ทีเอ็มบี",
+    "priority": 74
+  },
+  {
+    "keyword": "GYM",
+    "match_type": "substring",
+    "category": "subscription",
+    "category_label_th": "ค่าฟิตเนส",
+    "priority": 80
+  },
+  {
+    "keyword": "FITNESS",
+    "match_type": "substring",
+    "category": "subscription",
+    "category_label_th": "ค่าฟิตเนส",
+    "priority": 81
+  },
+  {
+    "keyword": "VIRGIN ACTIVE",
+    "match_type": "substring",
+    "category": "subscription",
+    "category_label_th": "Virgin Active",
+    "priority": 82
+  },
+  {
+    "keyword": "ANYTIME FITNESS",
+    "match_type": "substring",
+    "category": "subscription",
+    "category_label_th": "Anytime Fitness",
+    "priority": 83
+  },
+  {
+    "keyword": "CENTRAL DEPARTMENT STORE",
+    "match_type": "substring",
+    "category": "subscription",
+    "category_label_th": "บัตรสมาชิก เซ็นทรัล",
+    "priority": 90
+  },
+  {
+    "keyword": "MAKRO",
+    "match_type": "substring",
+    "category": "subscription",
+    "category_label_th": "บัตรสมาชิก แม็คโคร",
+    "priority": 91
+  }
+]

@@ -1,0 +1,7 @@
+{
+  "rent_amount_threshold": 3000.0,
+  "utility_amount_min": 500.0,
+  "utility_amount_max": 1000.0,
+  "loan_amount_threshold": 2000.0,
+  "family_support_amount_threshold": 1500.0
+}

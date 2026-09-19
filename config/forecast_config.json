@@ -1,0 +1,4 @@
+{
+  "recency_decay_factor": 0.8,
+  "days_per_month": 30.0
+}

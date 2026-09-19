@@ -1,0 +1,302 @@
+{
+  "pbtResults": {},
+  "executionHistory": {
+    "1. Set up project structure and configuration": [
+      {
+        "executionId": "884a1fc8-5626-4637-b7e7-ea7bc6e36854",
+        "chatSessionId": "sess_5e2bb2be-32aa-4fa4-8c10-686225d9a7bc",
+        "timestamp": 1789742944686
+      },
+      {
+        "executionId": "884a1fc8-5626-4637-b7e7-ea7bc6e36854",
+        "chatSessionId": "sess_5e2bb2be-32aa-4fa4-8c10-686225d9a7bc",
+        "timestamp": 1789743627680
+      }
+    ],
+    "2. Create database schema and migration": [
+      {
+        "executionId": "c2d8a6be-2dd9-4eea-818a-f1df5278d448",
+        "chatSessionId": "sess_03fd2372-3677-4e93-bd53-0fdcc8ca791d",
+        "timestamp": 1789743665348
+      },
+      {
+        "executionId": "c2d8a6be-2dd9-4eea-818a-f1df5278d448",
+        "chatSessionId": "sess_03fd2372-3677-4e93-bd53-0fdcc8ca791d",
+        "timestamp": 1789744416509
+      }
+    ],
+    "2.1 Create database migration script for all tables": [
+      {
+        "executionId": "c2d8a6be-2dd9-4eea-818a-f1df5278d448",
+        "chatSessionId": "sess_03fd2372-3677-4e93-bd53-0fdcc8ca791d",
+        "timestamp": 1789743670986
+      },
+      {
+        "executionId": "c2d8a6be-2dd9-4eea-818a-f1df5278d448",
+        "chatSessionId": "sess_03fd2372-3677-4e93-bd53-0fdcc8ca791d",
+        "timestamp": 1789743814222
+      }
+    ],
+    "2.2 Create seed data for merchant dictionary": [
+      {
+        "executionId": "c2d8a6be-2dd9-4eea-818a-f1df5278d448",
+        "chatSessionId": "sess_03fd2372-3677-4e93-bd53-0fdcc8ca791d",
+        "timestamp": 1789743820957
+      },
+      {
+        "executionId": "c2d8a6be-2dd9-4eea-818a-f1df5278d448",
+        "chatSessionId": "sess_03fd2372-3677-4e93-bd53-0fdcc8ca791d",
+        "timestamp": 1789744416443
+      }
+    ],
+    "3.1 Create PDFTextExtractor class": [
+      {
+        "executionId": "1ed3b2a1-2543-415d-969d-f424e0923957",
+        "chatSessionId": "sess_68a5d971-0936-43f9-9b17-c3c9b806bdea",
+        "timestamp": 1789744482672
+      }
+    ],
+    "4. Implement transaction record parser (HIGHEST PRIORITY - HIGHEST RISK)": [
+      {
+        "executionId": "4cd5dc91-d43d-4cbe-bda3-d7ccf768be81",
+        "chatSessionId": "sess_cbb195b6-bf8c-4465-b813-968a7a6fdb94",
+        "timestamp": 1789745702411
+      },
+      {
+        "executionId": "82781747-7b03-47c8-b7f1-5b0a8f269c85",
+        "chatSessionId": "sess_96b315f4-20f7-45d5-a181-f7418c6dd6b8",
+        "timestamp": 1789746029071
+      },
+      {
+        "executionId": "82781747-7b03-47c8-b7f1-5b0a8f269c85",
+        "chatSessionId": "sess_96b315f4-20f7-45d5-a181-f7418c6dd6b8",
+        "timestamp": 1789746721704
+      }
+    ],
+    "5. Checkpoint - Parser validation": [
+      {
+        "executionId": "7f52eb0c-63f2-4ecf-ab56-eed8c6c426cc",
+        "chatSessionId": "sess_4e0b8c88-f910-43d7-a7b0-eb839efcceff",
+        "timestamp": 1789747238012
+      }
+    ],
+    "6. Implement transaction normalizer": [
+      {
+        "executionId": "03801a76-d586-475d-8a4d-cf678c71576b",
+        "chatSessionId": "sess_aad3666d-6651-4cc3-92df-58d5963d0180",
+        "timestamp": 1789747386330
+      },
+      {
+        "executionId": "03801a76-d586-475d-8a4d-cf678c71576b",
+        "chatSessionId": "sess_aad3666d-6651-4cc3-92df-58d5963d0180",
+        "timestamp": 1789748206038
+      }
+    ],
+    "7. Implement categorization module": [
+      {
+        "executionId": "5581ae5d-e626-483c-9c68-f6613d7609d6",
+        "chatSessionId": "sess_20544897-a77e-4cb4-be74-0247c066d522",
+        "timestamp": 1789748329435
+      },
+      {
+        "executionId": "5581ae5d-e626-483c-9c68-f6613d7609d6",
+        "chatSessionId": "sess_20544897-a77e-4cb4-be74-0247c066d522",
+        "timestamp": 1789749189953
+      }
+    ],
+    "8. Implement recurring detection engine (CORE ALGORITHM)": [
+      {
+        "executionId": "e750647f-7084-441c-89e4-458375820f14",
+        "chatSessionId": "sess_d28c7e91-4d2f-406c-916b-b8b02207a367",
+        "timestamp": 1789749315691
+      },
+      {
+        "executionId": "c959ad3c-e541-426a-96d2-a8e2f21d4058",
+        "chatSessionId": "sess_d28c7e91-4d2f-406c-916b-b8b02207a367",
+        "timestamp": 1789752016189
+      }
+    ],
+    "8.1 Create DetectionConfig data class": [
+      {
+        "executionId": "c959ad3c-e541-426a-96d2-a8e2f21d4058",
+        "chatSessionId": "sess_d28c7e91-4d2f-406c-916b-b8b02207a367",
+        "timestamp": 1789751794198
+      },
+      {
+        "executionId": "c959ad3c-e541-426a-96d2-a8e2f21d4058",
+        "chatSessionId": "sess_d28c7e91-4d2f-406c-916b-b8b02207a367",
+        "timestamp": 1789751981042
+      }
+    ],
+    "8.2 Create RecurringType enum and RecurringPattern data class": [
+      {
+        "executionId": "c959ad3c-e541-426a-96d2-a8e2f21d4058",
+        "chatSessionId": "sess_d28c7e91-4d2f-406c-916b-b8b02207a367",
+        "timestamp": 1789752001216
+      }
+    ],
+    "8.3 Implement RecurringDetectionEngine._group_by_recipient_key()": [
+      {
+        "executionId": "c959ad3c-e541-426a-96d2-a8e2f21d4058",
+        "chatSessionId": "sess_d28c7e91-4d2f-406c-916b-b8b02207a367",
+        "timestamp": 1789752002024
+      }
+    ],
+    "8.4 Implement RecurringDetectionEngine._calculate_metrics()": [
+      {
+        "executionId": "c959ad3c-e541-426a-96d2-a8e2f21d4058",
+        "chatSessionId": "sess_d28c7e91-4d2f-406c-916b-b8b02207a367",
+        "timestamp": 1789752002872
+      }
+    ],
+    "8.5 Implement RecurringDetectionEngine._calculate_transaction_gaps()": [
+      {
+        "executionId": "c959ad3c-e541-426a-96d2-a8e2f21d4058",
+        "chatSessionId": "sess_d28c7e91-4d2f-406c-916b-b8b02207a367",
+        "timestamp": 1789752003483
+      }
+    ],
+    "8.6 Implement RecurringDetectionEngine._classify_recurring_type()": [
+      {
+        "executionId": "c959ad3c-e541-426a-96d2-a8e2f21d4058",
+        "chatSessionId": "sess_d28c7e91-4d2f-406c-916b-b8b02207a367",
+        "timestamp": 1789752004418
+      }
+    ],
+    "8.7 Implement RecurringDetectionEngine._adjust_thresholds_for_incomplete_data()": [
+      {
+        "executionId": "c959ad3c-e541-426a-96d2-a8e2f21d4058",
+        "chatSessionId": "sess_d28c7e91-4d2f-406c-916b-b8b02207a367",
+        "timestamp": 1789752009958
+      }
+    ],
+    "8.8 Implement RecurringDetectionEngine._calculate_confidence_score()": [
+      {
+        "executionId": "c959ad3c-e541-426a-96d2-a8e2f21d4058",
+        "chatSessionId": "sess_d28c7e91-4d2f-406c-916b-b8b02207a367",
+        "timestamp": 1789752010840
+      }
+    ],
+    "8.9 Implement RecurringDetectionEngine._analyze_recurring_pattern()": [
+      {
+        "executionId": "c959ad3c-e541-426a-96d2-a8e2f21d4058",
+        "chatSessionId": "sess_d28c7e91-4d2f-406c-916b-b8b02207a367",
+        "timestamp": 1789752012027
+      }
+    ],
+    "8.10 Implement RecurringDetectionEngine.detect_recurring_expenses()": [
+      {
+        "executionId": "c959ad3c-e541-426a-96d2-a8e2f21d4058",
+        "chatSessionId": "sess_d28c7e91-4d2f-406c-916b-b8b02207a367",
+        "timestamp": 1789752012298
+      }
+    ],
+    "8.11 Write unit tests for detection rules": [
+      {
+        "executionId": "c959ad3c-e541-426a-96d2-a8e2f21d4058",
+        "chatSessionId": "sess_d28c7e91-4d2f-406c-916b-b8b02207a367",
+        "timestamp": 1789752013227
+      }
+    ],
+    "8.12 Write property test for classification determinism": [
+      {
+        "executionId": "c959ad3c-e541-426a-96d2-a8e2f21d4058",
+        "chatSessionId": "sess_d28c7e91-4d2f-406c-916b-b8b02207a367",
+        "timestamp": 1789752014011
+      }
+    ],
+    "8.13 Write property test for incomplete data threshold adjustment": [
+      {
+        "executionId": "c959ad3c-e541-426a-96d2-a8e2f21d4058",
+        "chatSessionId": "sess_d28c7e91-4d2f-406c-916b-b8b02207a367",
+        "timestamp": 1789752016121
+      }
+    ],
+    "9. Checkpoint - Detection engine validation": [
+      {
+        "executionId": "12bd7b27-814b-4a1e-a9d7-8fe332408ace",
+        "chatSessionId": "sess_3c273413-058c-49f7-bac2-cee40cbf39c4",
+        "timestamp": 1789755469049
+      },
+      {
+        "executionId": "12bd7b27-814b-4a1e-a9d7-8fe332408ace",
+        "chatSessionId": "sess_3c273413-058c-49f7-bac2-cee40cbf39c4",
+        "timestamp": 1789755824639
+      }
+    ],
+    "12. Implement aggregation service and API": [
+      {
+        "executionId": "0c374960-e95f-4b22-9705-4339ea652ef1",
+        "chatSessionId": "sess_730f25f3-8a9f-4156-bce9-5d80b57f08c3",
+        "timestamp": 1789760157424
+      },
+      {
+        "executionId": "0c374960-e95f-4b22-9705-4339ea652ef1",
+        "chatSessionId": "sess_730f25f3-8a9f-4156-bce9-5d80b57f08c3",
+        "timestamp": 1789764860527
+      }
+    ],
+    "13. Implement idempotency and re-upload logic": [
+      {
+        "executionId": "aee2e3bd-2a5b-47f2-b971-093507c736ce",
+        "chatSessionId": "sess_e8a5021d-25a9-4b74-b261-ce9e6391c533",
+        "timestamp": 1789764882677
+      }
+    ],
+    "14. Implement main processing pipeline": [
+      {
+        "executionId": "c801ef2f-62ba-47c5-905d-9d566dac604b",
+        "chatSessionId": "sess_de16205b-2151-4282-97f4-64f5a8503b1f",
+        "timestamp": 1789818553560
+      },
+      {
+        "executionId": "c801ef2f-62ba-47c5-905d-9d566dac604b",
+        "chatSessionId": "sess_de16205b-2151-4282-97f4-64f5a8503b1f",
+        "timestamp": 1789819953600
+      }
+    ],
+    "15. Checkpoint - End-to-end integration test": [
+      {
+        "executionId": "e07dd869-0d7c-4abc-bf9f-98c3d9efa5d8",
+        "chatSessionId": "sess_f4a9393d-0f9e-4fc2-b4e6-cc76cd6d4e37",
+        "timestamp": 1789820236511
+      },
+      {
+        "executionId": "e07dd869-0d7c-4abc-bf9f-98c3d9efa5d8",
+        "chatSessionId": "sess_f4a9393d-0f9e-4fc2-b4e6-cc76cd6d4e37",
+        "timestamp": 1789820336201
+      }
+    ],
+    "16. Security and performance enhancements": [
+      {
+        "executionId": "4d2296dc-d10e-4518-937a-7a17a3bc7563",
+        "chatSessionId": "sess_825e598d-15e1-4ee2-83e7-7ccf688d7558",
+        "timestamp": 1789820386683
+      },
+      {
+        "executionId": "4d2296dc-d10e-4518-937a-7a17a3bc7563",
+        "chatSessionId": "sess_825e598d-15e1-4ee2-83e7-7ccf688d7558",
+        "timestamp": 1789821270672
+      }
+    ],
+    "17. Integration testing": [
+      {
+        "executionId": "8ed28e5b-11a5-4e9c-90f9-30ea83627d05",
+        "chatSessionId": "sess_a31f4b9d-a8ad-48ef-81fe-cb7ec63a6ad2",
+        "timestamp": 1789821294921
+      },
+      {
+        "executionId": "8ed28e5b-11a5-4e9c-90f9-30ea83627d05",
+        "chatSessionId": "sess_a31f4b9d-a8ad-48ef-81fe-cb7ec63a6ad2",
+        "timestamp": 1789823726666
+      }
+    ],
+    "18. Final checkpoint": [
+      {
+        "executionId": "b0cf40c3-b2d5-42c1-82bd-14b895f77b0c",
+        "chatSessionId": "sess_5eac305c-d00a-4283-be9f-7413f016c041",
+        "timestamp": 1789824077504
+      }
+    ]
+  }
+}
