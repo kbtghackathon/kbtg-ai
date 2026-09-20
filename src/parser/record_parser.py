@@ -14,6 +14,18 @@ from typing import List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
+# Thai "sara am" (ำ, U+0E33) is sometimes extracted from PDFs as the two-codepoint
+# sequence nikhahit + sara aa (ํ + า, U+0E4D U+0E32). They render identically but
+# do not compare equal, so all text is folded to the single-codepoint form before
+# any matching. Every Thai literal in this package uses the U+0E33 form.
+_NIKHAHIT_SARA_AA = 'ํา'
+_SARA_AM = 'ำ'
+
+
+def normalize_thai_text(text: str) -> str:
+    """Fold nikhahit+sara-aa into sara am so Thai strings match reliably."""
+    return text.replace(_NIKHAHIT_SARA_AA, _SARA_AM)
+
 
 @dataclass
 class RawTransaction:
@@ -33,8 +45,50 @@ class RawTransaction:
     source_statement_month: date            # Month of source statement file
 
 
+@dataclass
+class ParseStats:
+    """
+    How much of a statement the parser managed to read.
+
+    Kept because a savings recommendation built on a half-read statement should
+    be more cautious than one built on a clean parse -- and until this was
+    counted, the service reported a success rate of 1.0 unconditionally, which
+    is the one answer that can never be wrong and never be useful.
+    """
+
+    # attempted counts records that looked like transactions: a line opening
+    # with a DD-MM-YY date, merged with its continuation lines.
+    attempted: int = 0
+    parsed: int = 0
+    # opening_balance rows are recognised and deliberately dropped. They are
+    # excluded from the rate, because discarding them is success, not failure.
+    opening_balance: int = 0
+    failed: int = 0
+
+    @property
+    def success_rate(self) -> float:
+        """
+        Share of real transaction records that parsed, 0-1.
+
+        A statement with nothing that looked like a transaction scores 1.0: no
+        records were missed, there were none. Whether an empty statement is
+        itself a problem is the caller's judgement, and it has the count.
+        """
+        considered = self.attempted - self.opening_balance
+        if considered <= 0:
+            return 1.0
+
+        return self.parsed / considered
+
+
 class RecordParser:
     """Parse raw statement text into structured transaction records"""
+
+    def __init__(self):
+        # Accumulates across every statement handed to one parser, which is
+        # how the pipeline uses it: one parser, several months.
+        self.stats = ParseStats()
+
     
     # Date pattern for detecting transaction start: DD-MM-YY
     DATE_PATTERN = re.compile(r'^\d{2}-\d{2}-\d{2}')
@@ -43,7 +97,6 @@ class RecordParser:
     TRANSACTION_TYPES = {
         # Thai patterns
         'รับโอนเงิน': 'รับโอนเงิน',  # Check this BEFORE โอนเงิน
-        'ชําระเงิน': 'ชำระเงิน',  # Note: may have different Unicode encoding
         'ชำระเงิน': 'ชำระเงิน',
         'โอนเงิน': 'โอนเงิน',
         'ยอดยกมา': 'ยอดยกมา',
@@ -66,7 +119,7 @@ class RecordParser:
         Returns:
             List of parsed transaction records (excluding opening balance)
         """
-        lines = raw_text.split('\n')
+        lines = normalize_thai_text(raw_text).split('\n')
         transactions = []
         i = 0
         previous_balance = None
@@ -86,6 +139,7 @@ class RecordParser:
             
             # Merge multi-line record
             record_text, next_index = self._merge_multiline_record(lines, i)
+            self.stats.attempted += 1
             
             # Parse single record
             try:
@@ -93,12 +147,14 @@ class RecordParser:
                 
                 if transaction is None:
                     logger.debug(f"Skipping record (parse failed or opening balance): {record_text[:100]}")
+                    self.stats.failed += 1
                     i = next_index
                     continue
                 
                 # Skip opening balance
                 if transaction.transaction_type == "ยอดยกมา":
                     previous_balance = transaction.balance_after
+                    self.stats.opening_balance += 1
                     logger.debug(f"Opening balance: {previous_balance}")
                     i = next_index
                     continue
@@ -120,14 +176,19 @@ class RecordParser:
                         )
                 
                 transactions.append(transaction)
+                self.stats.parsed += 1
                 previous_balance = transaction.balance_after
                 
             except Exception as e:
                 logger.error(f"Failed to parse record: {record_text[:200]}", exc_info=True)
+                self.stats.failed += 1
             
             i = next_index
         
-        logger.info(f"Parsed {len(transactions)} transactions from statement")
+        logger.info(
+            f"Parsed {len(transactions)} transactions from statement "
+            f"(success rate {self.stats.success_rate:.0%})"
+        )
         return transactions
     
     def _merge_multiline_record(self, lines: List[str], start_index: int) -> Tuple[str, int]:
@@ -138,7 +199,9 @@ class RecordParser:
         Returns:
             (merged_text, next_record_index)
         """
-        merged_lines = [lines[start_index]]
+        # Strip: pdfplumber layout mode indents every line, and the date regex in
+        # _parse_single_record is anchored at the start of the record.
+        merged_lines = [lines[start_index].strip()]
         i = start_index + 1
         
         # Continue until we hit the next date pattern or end of lines
@@ -171,6 +234,7 @@ class RecordParser:
             RawTransaction or None if parsing fails or is opening balance
         """
         # Extract date (DD-MM-YY format at start)
+        record_text = record_text.strip()
         date_match = re.match(r'^(\d{2})-(\d{2})-(\d{2})', record_text)
         if not date_match:
             return None
@@ -192,7 +256,29 @@ class RecordParser:
         # Look for numeric patterns: amount with commas like "1,500.00" or "266.50"
         # Balance appears after the transaction type or channel
         amounts = self._extract_amounts(record_text)
-        
+
+        # Opening balance (ยอดยกมา) carries only the balance column. It must still be
+        # returned so the caller can seed previous_balance for validation.
+        if transaction_type == "ยอดยกมา":
+            if not amounts:
+                logger.warning(f"Opening balance record without amount: {record_text[:100]}")
+                return None
+            return RawTransaction(
+                date=transaction_date,
+                time=transaction_time,
+                transaction_type=transaction_type,
+                amount=0.0,
+                balance_after=amounts[-1],
+                channel="UNKNOWN",
+                ref_no=None,
+                raw_detail_text=record_text,
+                recipient_name=None,
+                recipient_account_masked=None,
+                merchant_name=None,
+                is_promptpay=False,
+                source_statement_month=statement_month
+            )
+
         if len(amounts) < 2:
             logger.warning(f"Could not extract amounts: {record_text[:100]}")
             return None
@@ -287,9 +373,9 @@ class RecordParser:
         Extract numeric amounts from text
         Handles formats like "1,500.00" or "266.50"
         """
-        # Pattern to match numbers with optional commas and mandatory decimals
-        # Must have at least one digit before decimal point
-        pattern = r'\b(\d{1,3}(?:,\d{3})*\.\d{2})\b'
+        # Matches "1,500.00", "20,000.00" and also "1500.00" (no thousands separator).
+        # Mandatory two decimals keep dates, times and masked refs out.
+        pattern = r'(?<![\d,.])((?:\d{1,3}(?:,\d{3})+|\d+)\.\d{2})(?!\d)'
         matches = re.findall(pattern, text)
         
         amounts = []
@@ -375,10 +461,9 @@ class RecordParser:
         )
         if account_holder_match:
             recipient_name = account_holder_match.group(1).strip()
-            # Try to find Ref X#### before the account holder info
-            ref_match = re.search(r'Ref\s+([A-Z0-9]+)', detail_text)
-            if ref_match:
-                recipient_account_masked = ref_match.group(1)
+            # The "Ref X####" code on QR/EDC payments is a transaction reference, not
+            # an account, so it is deliberately NOT used as recipient_account_masked:
+            # doing so gave every payment a unique recipient key and broke grouping.
             return recipient_name, recipient_account_masked, is_promptpay
         
         return recipient_name, recipient_account_masked, is_promptpay
@@ -389,8 +474,8 @@ class RecordParser:
         Handles multi-line merchant names (already merged by _merge_multiline_record)
         
         HIGHEST RISK COMPONENT - handles multiple formats:
-        - "เพื่อชําระ Ref X8955 TrueMoney Wallet"
-        - "เพื่อชําระ Ref X9481 ทูเดย์สเต็ก อาหาตามสั่ง"
+        - "เพื่อชำระ Ref X8955 TrueMoney Wallet"
+        - "เพื่อชำระ Ref X9481 ทูเดย์สเต็ก อาหาตามสั่ง"
         - Multi-line merchant names (now merged):
           * "Payment to ShopeeFood"
           * "CFM-Flat Thungmahameak"
@@ -412,9 +497,9 @@ class RecordParser:
             merchant_name = self._clean_merchant_name(merchant_name)
             return merchant_name if merchant_name else None
         
-        # Pattern 1: Thai - เพื่อชําระ Ref X#### merchant_name
+        # Pattern 1: Thai - เพื่อชำระ Ref X#### merchant_name
         payment_match = re.search(
-            r'เพื่อชําระ\s+Ref\s+[A-Z0-9]+\s+(.+?)(?:\s+(?:ชําระเงิน|โอนเงิน)|\s*\(ชื่อบัญชี:|$)',
+            r'เพื่อชำระ\s+Ref\s+[A-Z0-9]+\s+(.+?)(?:\s+(?:ชำระเงิน|โอนเงิน)|\s*\(ชื่อบัญชี:|$)',
             detail_text,
             re.IGNORECASE
         )
@@ -426,7 +511,7 @@ class RecordParser:
         # Pattern 2: ชำระเงิน (direct, with different Unicode encoding)
         # Handles cases like "ชำระเงิน 50.00" followed by merchant in next part
         payment_match2 = re.search(
-            r'ชําระเงิน\s+[\d,]+\.\d{2}\s+(.+?)(?:\s+ชําระเงิน|\s*\(ชื่อบัญชี:|$)',
+            r'ชำระเงิน\s+[\d,]+\.\d{2}\s+(.+?)(?:\s+ชำระเงิน|\s*\(ชื่อบัญชี:|$)',
             detail_text,
             re.IGNORECASE
         )
@@ -436,9 +521,9 @@ class RecordParser:
             return merchant_name if merchant_name else None
         
         # Pattern 3: EDC/K SHOP/MYQR format with Ref and merchant before (ชื่อบัญชี:
-        # Example: "EDC/K SHOP/MYQR เพื่อชําระ Ref X9481 ทูเดย์สเต็ก อาหาตามสั่ง (ชื่อบัญชี: ..."
+        # Example: "EDC/K SHOP/MYQR เพื่อชำระ Ref X9481 ทูเดย์สเต็ก อาหาตามสั่ง (ชื่อบัญชี: ..."
         edc_match = re.search(
-            r'EDC/K SHOP/MYQR\s+เพื่อชําระ\s+Ref\s+[A-Z0-9]+\s+(.+?)(?:\s+ชําระเงิน|\s*\(ชื่อบัญชี:|$)',
+            r'EDC/K SHOP/MYQR\s+เพื่อชำระ\s+Ref\s+[A-Z0-9]+\s+(.+?)(?:\s+ชำระเงิน|\s*\(ชื่อบัญชี:|$)',
             detail_text,
             re.IGNORECASE
         )

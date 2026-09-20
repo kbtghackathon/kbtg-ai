@@ -125,24 +125,21 @@ class TransactionNormalizer:
         Create unique recipient key for grouping
         Priority:
         1. recipient_account_masked (most accurate)
-        2. normalized merchant_name + ref_no prefix (for known merchants)
+        2. normalized merchant_name
         3. normalized recipient_name (for person-to-person transfers)
-        
+
+        ref_no is intentionally excluded: it is a per-transaction reference, so
+        including it split the same merchant into one key per payment and made
+        recurring detection impossible.
+
         Returns:
             Unique recipient key string
         """
         # Priority 1: Use recipient_account_masked if available
         if transaction.recipient_account_masked:
             return f"ACCOUNT:{transaction.recipient_account_masked}"
-        
-        # Priority 2: Use normalized merchant_name + ref_no prefix
-        # This is useful for merchants where we have the ref number
-        if normalized_merchant_name and transaction.ref_no:
-            # Use first 4 characters of ref_no as prefix for grouping
-            ref_prefix = transaction.ref_no[:4] if len(transaction.ref_no) >= 4 else transaction.ref_no
-            return f"MERCHANT:{normalized_merchant_name}:REF:{ref_prefix}"
-        
-        # Alternative Priority 2: Just normalized merchant name (without ref)
+
+        # Priority 2: normalized merchant name
         if normalized_merchant_name:
             return f"MERCHANT:{normalized_merchant_name}"
         

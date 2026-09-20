@@ -28,18 +28,17 @@ htmlcov/
 .git/
 .gitignore
 
-# Documentation
+# Documentation and tests
 *.md
 docs/
+tests/
 
 # Kiro
 .kiro/
 
-# Database (not needed for stateless microservice)
+# Database
 *.db
 *.sqlite
-*.sql
-migrations/
 
 # Misc
 .env

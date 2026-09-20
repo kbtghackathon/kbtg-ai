@@ -98,6 +98,7 @@ cython_debug/
 
 # Project specific
 *.pdf
+!tests/fixtures/*.pdf
 data/statements/
 temp/
 tmp/
@@ -110,17 +111,4 @@ tmp/
 models/
 checkpoints/
 
-# Documentation and test files
-*.md
-test_*.py
-*_test.py
-tests/
-quick_*.py
-demo_*.py
-check_*.py
-send_*.py
 *.bak
-*.txt
-test_*.sh
-test_*.ps1
-extracted_*.txt

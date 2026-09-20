@@ -19,8 +19,19 @@ from typing import Dict, List, Optional, Tuple
 from uuid import UUID
 
 from ..normalizer.transaction_normalizer import NormalizedTransaction
+from ..parser.record_parser import normalize_thai_text
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class MerchantEntry:
+    """One compiled merchant dictionary entry"""
+    keyword: str            # Upper-cased, Thai-normalized keyword
+    pattern: "re.Pattern"   # Word-bounded for ASCII keywords, plain substring for Thai
+    category: str
+    category_label_th: str
+    priority: int
 
 
 class CategoryGroup(Enum):
@@ -43,7 +54,7 @@ class CategorizationModule:
     """Categorize transactions using merchant dictionary and patterns"""
     
     # Class-level cache for merchant dictionary (shared across instances)
-    _merchant_dict_cache: Optional[Dict[str, Tuple[str, str, int]]] = None
+    _merchant_dict_cache: Optional[List[MerchantEntry]] = None
     _cache_timestamp: Optional[float] = None
     
     def __init__(self, merchant_dict_path: Optional[Path] = None):
@@ -145,47 +156,62 @@ class CategorizationModule:
             f"timestamp {CategorizationModule._cache_timestamp}"
         )
     
-    def _load_merchant_dictionary(self) -> Dict[str, Tuple[str, str, int]]:
+    def _load_merchant_dictionary(self) -> List[MerchantEntry]:
         """
-        Load merchant_category_dict from JSON file
-        
+        Load merchant_category_dict from JSON file and compile one pattern per keyword.
+
+        ASCII keywords are matched on word boundaries so that "MEA" no longer hits
+        "MEAL" and "AIS" no longer hits "RAISE". Thai keywords have no word
+        delimiters, so they stay plain substring matches.
+
         Returns:
-            Dict mapping keyword to (category, category_label_th, priority)
-            
+            List of compiled MerchantEntry (later duplicates of a keyword are dropped)
+
         Requirements: 4.1-4.7
         """
         try:
             with open(self.merchant_dict_path, 'r', encoding='utf-8') as f:
                 merchant_data = json.load(f)
-            
-            # Build dictionary: keyword -> (category, category_label_th, priority)
-            merchant_dict = {}
-            
+
+            entries: Dict[str, MerchantEntry] = {}
+
             for entry in merchant_data:
-                keyword = entry.get('keyword', '')
+                keyword = normalize_thai_text(entry.get('keyword', '')).strip().upper()
                 match_type = entry.get('match_type', 'substring')
                 category = entry.get('category', '')
                 category_label_th = entry.get('category_label_th', category)
                 priority = entry.get('priority', 999)
-                
+
                 # Only support substring matching for now
-                if match_type == 'substring' and keyword:
-                    key = keyword.upper()  # Case-insensitive matching
-                    merchant_dict[key] = (category, category_label_th, priority)
-            
-            logger.info(f"Loaded {len(merchant_dict)} merchant dictionary entries from {self.merchant_dict_path}")
-            
-            return merchant_dict
-            
+                if match_type != 'substring' or not keyword or keyword in entries:
+                    continue
+
+                if keyword.isascii():
+                    pattern = re.compile(r'(?<![A-Z0-9])' + re.escape(keyword) + r'(?![A-Z0-9])')
+                else:
+                    pattern = re.compile(re.escape(keyword))
+
+                entries[keyword] = MerchantEntry(
+                    keyword=keyword,
+                    pattern=pattern,
+                    category=category,
+                    category_label_th=category_label_th,
+                    priority=priority,
+                )
+
+            logger.info(f"Loaded {len(entries)} merchant dictionary entries from {self.merchant_dict_path}")
+
+            return list(entries.values())
+
         except FileNotFoundError:
             logger.error(f"Merchant dictionary file not found: {self.merchant_dict_path}")
-            return {}
+            return []
         except json.JSONDecodeError as e:
             logger.error(f"Failed to parse merchant dictionary JSON: {str(e)}")
-            return {}
+            return []
         except Exception as e:
             logger.error(f"Failed to load merchant dictionary: {str(e)}")
-            return {}
+            return []
     
     def _match_merchant(
         self, 
@@ -203,39 +229,35 @@ class CategorizationModule:
             
         Requirements: 4.5, 5.7, 16.5
         """
-        if not merchant_name or CategorizationModule._merchant_dict_cache is None:
+        if not merchant_name or not CategorizationModule._merchant_dict_cache:
             return None
-        
-        # Convert to uppercase for case-insensitive matching
-        merchant_upper = merchant_name.upper()
-        
-        # Track all matches with their priorities
-        matches: List[Tuple[str, str, int]] = []
-        
-        # Substring matching against class-level cache
-        for keyword, (category, category_label_th, priority) in CategorizationModule._merchant_dict_cache.items():
-            if keyword in merchant_upper:
-                matches.append((category, category_label_th, priority))
-        
+
+        # Case-insensitive, Thai-normalized matching
+        merchant_upper = normalize_thai_text(merchant_name).upper()
+
+        matches = [
+            entry for entry in CategorizationModule._merchant_dict_cache
+            if entry.pattern.search(merchant_upper)
+        ]
+
         # No matches found
         if not matches:
             return None
-        
-        # Sort by priority (lower number = higher priority)
-        matches.sort(key=lambda x: x[2])
-        
-        # Return the highest priority match
+
+        # Most specific keyword wins ("AIS FIBRE" beats "AIS"), then lowest priority number
+        matches.sort(key=lambda e: (-len(e.keyword), e.priority))
+
         best_match = matches[0]
-        category, category_label_th, priority = best_match
-        
+        category = best_match.category
+        category_label_th = best_match.category_label_th
+        priority = best_match.priority
+
         # Calculate confidence based on match characteristics
         # Higher confidence for:
         # - Higher priority (lower priority number)
         # - Exact match vs substring match
-        
-        # Check for exact match
-        is_exact_match = merchant_upper in CategorizationModule._merchant_dict_cache
-        
+        is_exact_match = merchant_upper == best_match.keyword
+
         if is_exact_match:
             confidence = 1.0  # Exact match
         else:

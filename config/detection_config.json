@@ -7,7 +7,7 @@
   "monthly_variable_min_months": 4,
   "monthly_variable_day_std_max": 5.0,
   "monthly_variable_amount_cv_max": 0.30,
-  "periodic_min_transactions": 2,
+  "periodic_min_transactions": 3,
   "periodic_gap_std_max": 15.0,
   "periodic_gap_min_days": 45.0,
   "confidence_data_completeness_weight": 0.4,

@@ -1,19 +1,19 @@
 """
 Main Processing Pipeline Module
 
-This module orchestrates the end-to-end recurring expense detection pipeline.
+This module orchestrates the end-to-end, stateless recurring expense detection pipeline.
 """
 
-from .main_pipeline import (
-    process_recurring_expense_detection,
-    configure_structured_logging,
-    PipelineError,
-    PipelineResult
+from .stateless_pipeline import (
+    analyze,
+    analyze_from_base64,
+    analyze_from_text,
+    AnalyzeResponse,
 )
 
 __all__ = [
-    'process_recurring_expense_detection',
-    'configure_structured_logging',
-    'PipelineError',
-    'PipelineResult'
+    'analyze',
+    'analyze_from_base64',
+    'analyze_from_text',
+    'AnalyzeResponse',
 ]

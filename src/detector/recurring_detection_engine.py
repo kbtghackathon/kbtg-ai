@@ -39,6 +39,7 @@ class RecurringPattern:
     n_months_present: int              # Number of months this expense appeared
     amount_cv: float                   # Coefficient of variation (std/mean)
     day_std: float                     # Standard deviation of transaction day-of-month
+    day_of_month: int                  # Typical day this lands (median); 0 when unknown
     n_transactions_per_month: float    # Average transactions per month
     mean_amount: float                 # Average transaction amount
     median_amount: float               # Median transaction amount
@@ -168,6 +169,7 @@ class RecurringDetectionEngine:
                 "n_months_present": 0,
                 "amount_cv": 0.0,
                 "day_std": 0.0,
+                "day_of_month": 0,
                 "n_transactions_per_month": 0.0,
                 "mean_amount": 0.0,
                 "median_amount": 0.0,
@@ -211,6 +213,21 @@ class RecurringDetectionEngine:
         else:
             day_std = 0.0
         
+        # Typical day of the month this expense lands on.
+        #
+        # Median rather than mean: a bill normally paid on the 3rd that slipped
+        # to the 28th once averages to the 9th, which is a date it has never
+        # actually fallen on. A consumer deciding what is still to come this
+        # month needs the day it usually lands, not the arithmetic centre.
+        sorted_days = sorted(days_of_month)
+        m = len(sorted_days)
+        if m == 0:
+            day_of_month = 0
+        elif m % 2 == 0:
+            day_of_month = int(round((sorted_days[m // 2 - 1] + sorted_days[m // 2]) / 2))
+        else:
+            day_of_month = sorted_days[m // 2]
+        
         # Calculate n_transactions_per_month
         # Requirement 23.5, 23.6
         n_transactions_per_month = len(transactions) / n_months_present if n_months_present > 0 else 0.0
@@ -219,6 +236,7 @@ class RecurringDetectionEngine:
             "n_months_present": n_months_present,
             "amount_cv": amount_cv,
             "day_std": day_std,
+            "day_of_month": day_of_month,
             "n_transactions_per_month": n_transactions_per_month,
             "mean_amount": mean_amount,
             "median_amount": median_amount,
@@ -330,16 +348,14 @@ class RecurringDetectionEngine:
         # Requirement 6.8
         if len(transactions) >= adjusted_config.periodic_min_transactions:
             gaps = self._calculate_transaction_gaps(transactions)
-            
-            if gaps:
+
+            # A single gap has zero std by definition and proves nothing about
+            # regularity, so at least two gaps (three transactions) are required.
+            if len(gaps) >= 2:
                 mean_gap = sum(gaps) / len(gaps)
-                
-                if len(gaps) > 1:
-                    variance_gap = sum((x - mean_gap) ** 2 for x in gaps) / len(gaps)
-                    std_gap = math.sqrt(variance_gap)
-                else:
-                    std_gap = 0.0
-                
+                variance_gap = sum((x - mean_gap) ** 2 for x in gaps) / len(gaps)
+                std_gap = math.sqrt(variance_gap)
+
                 if (std_gap < adjusted_config.periodic_gap_std_max and
                     mean_gap > adjusted_config.periodic_gap_min_days):
                     
@@ -372,22 +388,26 @@ class RecurringDetectionEngine:
         """
         if total_months >= 6:
             return self.config
-        
+
+        # Never require fewer than 2 months: a single occurrence is not evidence
+        # of recurrence, no matter how little data is available.
+        MIN_MONTHS_FLOOR = 2
+
         # Create a copy with adjusted thresholds
         adjusted = DetectionConfig(
             # Adjust monthly fixed min months proportionally
-            # Example: if 2 months available, require 2 instead of 4
-            # Formula: min(total_months, ceiling(original * total_months / 6))
-            monthly_fixed_min_months=min(
+            # Example: if 3 months available, require 2 instead of 4
+            # Formula: max(2, min(total_months, ceiling(original * total_months / 6)))
+            monthly_fixed_min_months=max(MIN_MONTHS_FLOOR, min(
                 total_months,
                 math.ceil(self.config.monthly_fixed_min_months * total_months / 6)
-            ),
-            
+            )),
+
             # Adjust monthly variable min months proportionally
-            monthly_variable_min_months=min(
+            monthly_variable_min_months=max(MIN_MONTHS_FLOOR, min(
                 total_months,
                 math.ceil(self.config.monthly_variable_min_months * total_months / 6)
-            ),
+            )),
             
             # Keep other thresholds unchanged
             frequent_spend_transactions_per_month=self.config.frequent_spend_transactions_per_month,
@@ -553,6 +573,7 @@ class RecurringDetectionEngine:
             n_months_present=metrics["n_months_present"],
             amount_cv=metrics["amount_cv"],
             day_std=metrics["day_std"],
+            day_of_month=metrics["day_of_month"],
             n_transactions_per_month=metrics["n_transactions_per_month"],
             mean_amount=metrics["mean_amount"],
             median_amount=metrics["median_amount"],

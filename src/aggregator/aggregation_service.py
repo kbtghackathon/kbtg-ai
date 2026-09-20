@@ -9,6 +9,7 @@ Requirements: 9.1-9.11, 10.1-10.10, 25.4, 25.5
 """
 
 import logging
+import math
 from dataclasses import dataclass
 from typing import List, Optional, Dict, Any
 from uuid import UUID
@@ -21,12 +22,29 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class RecurringExpenseSummaryItem:
-    """Single recurring expense item in summary"""
+    """
+    Single recurring expense item in summary.
+
+    The four fields below the original five carry the detector's own view of
+    the pattern to the consumer. Without them a caller sees only "฿6,500 a
+    month" and cannot tell a rent payment from a volatile habit, or know
+    whether this month's has already gone out -- both of which change how much
+    of the remaining balance is genuinely spare.
+    """
     category: str
     category_label_th: str
     amount: float
     confidence: float
     recipient_key: str
+    # monthly_fixed | monthly_variable | periodic_non_monthly
+    recurring_type: str = "monthly_fixed"
+    # Coefficient of variation of the amount. 0 is a flat bill; higher is a
+    # bill worth leaving headroom for.
+    amount_cv: float = 0.0
+    # Typical day of the month it lands on. 0 when it could not be determined.
+    day_of_month: int = 0
+    # How many distinct months it was seen in.
+    n_months_present: int = 0
 
 
 @dataclass
@@ -99,7 +117,11 @@ class AggregationService:
                 category_label_th=pattern.category_label_th or "อื่นๆ",
                 amount=pattern.forecast_amount,
                 confidence=pattern.confidence_score,
-                recipient_key=pattern.recipient_key
+                recipient_key=pattern.recipient_key,
+                recurring_type=pattern.recurring_type.value,
+                amount_cv=pattern.amount_cv if math.isfinite(pattern.amount_cv) else 0.0,
+                day_of_month=pattern.day_of_month,
+                n_months_present=pattern.n_months_present,
             )
             for pattern in filtered_expenses
         ]

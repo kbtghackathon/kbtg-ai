@@ -59,7 +59,7 @@ class DetectionConfig:
     monthly_variable_amount_cv_max: float = 0.30
     
     # Rule 4: Periodic non-monthly (Requirements 13.10, 13.11, 13.12)
-    periodic_min_transactions: int = 2
+    periodic_min_transactions: int = 3
     periodic_gap_std_max: float = 15.0
     periodic_gap_min_days: float = 45.0
     

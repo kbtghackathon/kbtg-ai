@@ -1,4 +1,4 @@
-﻿"""
+"""
 Stateless Main Processing Pipeline
 
 This module implements the stateless orchestration function for the recurring expense
@@ -9,24 +9,27 @@ All components work with in-memory data only - no database persistence.
 
 import logging
 import base64
-from pathlib import Path
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Tuple
 from datetime import date, datetime
 from dataclasses import dataclass, asdict
-from io import BytesIO
+from uuid import uuid4
 
 from ..parser.pdf_extractor import PDFTextExtractor, PDFExtractionError
-from ..parser.record_parser import RecordParser, RawTransaction
+from ..parser.record_parser import RecordParser, RawTransaction, ParseStats
+from ..parser.columnar_parser import ColumnarStatementParser, looks_like_columnar
 from ..normalizer.transaction_normalizer import TransactionNormalizer
 from ..categorizer.categorization_module import CategorizationModule
 from ..detector.recurring_detection_engine import RecurringDetectionEngine, RecurringType
 from ..forecaster.amount_forecast_module import AmountForecastModule
-from ..aggregator.aggregation_service import AggregationService, RecurringSummary
+from ..aggregator.aggregation_service import AggregationService
+from ..aggregator.cashflow_signals import derive_cashflow_signals
 from ..config.detection_config import DetectionConfig
 from ..config.forecast_config import ForecastConfig
-from ..config.user_labeling_config import UserLabelingConfig
 
 logger = logging.getLogger(__name__)
+
+NO_TRANSACTIONS_PDF_WARNING = "ไม่สามารถแยกวิเคราะห์ธุรกรรมจาก PDF ที่ให้มา"
+NO_TRANSACTIONS_TEXT_WARNING = "ไม่สามารถแยกวิเคราะห์ธุรกรรมจากข้อความที่ให้มา"
 
 
 @dataclass
@@ -43,6 +46,16 @@ class AnalyzeResponse:
     parsed_transaction_count: int
     parse_success_rate: float
 
+    # Cash-flow signals: what the statement says about money moving, as
+    # distinct from what is committed. All default so an empty response and
+    # the text pipeline stay valid without restating them.
+    closing_balance: float = 0.0
+    observed_income: float = 0.0
+    income_months: int = 0
+    payday_day_of_month: Optional[int] = None
+    variable_spend_monthly: float = 0.0
+    avg_daily_spend: float = 0.0
+
 
 def analyze(
     pdf_files: List[bytes],
@@ -54,242 +67,59 @@ def analyze(
 ) -> AnalyzeResponse:
     """
     Main stateless pipeline for recurring expense detection.
-    
-    This is a pure function that takes all inputs as parameters and returns
-    results without any side effects or database persistence.
-    
+
     Pipeline:
     1. Extract text from PDFs
     2. Parse transactions from raw text
-    3. Normalize transactions
-    4. Categorize using merchant dict + existing user labels
-    5. Detect recurring patterns
-    6. Forecast amounts
-    7. Generate pending labels
-    8. Aggregate summary
-    
+    3-8. Shared pipeline (see _run_pipeline)
+
     Args:
         pdf_files: List of PDF file contents as bytes (1-6 months of statements)
         current_salary: User's current month salary
         existing_user_labels: List of dicts with keys: recipient_key, category, category_label_th
-        statement_months: List of statement months (if None, extracted from PDFs)
+        statement_months: Optional override for each statement's month. If None, each
+                          transaction's statement month is derived from its own date.
         detection_config: Detection thresholds (default if None)
         forecast_config: Forecasting parameters (default if None)
-        
+
     Returns:
         AnalyzeResponse with complete summary and metadata
+
+    Raises:
+        PDFExtractionError: If any PDF cannot be read
     """
-    start_time = datetime.utcnow()
-    
-    # Use default configs if not provided
-    detection_config = detection_config or DetectionConfig()
-    forecast_config = forecast_config or ForecastConfig()
-    existing_user_labels = existing_user_labels or []
-    
     logger.info(
         f"Starting stateless pipeline: {len(pdf_files)} PDFs, "
         f"salary={current_salary:.2f}, "
-        f"existing_labels={len(existing_user_labels)}"
+        f"existing_labels={len(existing_user_labels or [])}"
     )
-    
-    # ============================================================
+
     # STEP 1: PDF Text Extraction
-    # ============================================================
     logger.info(f"Step 1: Extracting text from {len(pdf_files)} PDF files")
-    
     extractor = PDFTextExtractor()
     raw_texts: List[str] = []
-    
     for i, pdf_bytes in enumerate(pdf_files):
         try:
-            # Extract text from bytes
-            raw_text = extractor.extract_text_from_pdf_bytes(pdf_bytes)
-            raw_texts.append(raw_text)
+            raw_texts.append(extractor.extract_text_from_pdf_bytes(pdf_bytes))
             logger.info(f"Successfully extracted text from PDF {i+1}")
         except PDFExtractionError as e:
             logger.error(f"Failed to extract text from PDF {i+1}: {str(e)}")
             raise
-    
-    # ============================================================
-    # STEP 2: Transaction Parsing
-    # ============================================================
-    logger.info("Step 2: Parsing transactions from raw text")
-    
-    parser = RecordParser()
-    all_raw_transactions: List[RawTransaction] = []
-    
-    # If statement_months not provided, use sequential months
-    if statement_months is None:
-        base_month = datetime.utcnow().replace(day=1)
-        statement_months = [
-            date(base_month.year, base_month.month, 1)
-            for _ in range(len(raw_texts))
-        ]
-    
-    for raw_text, statement_month in zip(raw_texts, statement_months):
-        try:
-            transactions = parser.parse_statement_text(raw_text, statement_month)
-            all_raw_transactions.extend(transactions)
-            logger.info(
-                f"Parsed {len(transactions)} transactions from statement {statement_month.isoformat()}"
-            )
-        except Exception as e:
-            logger.error(f"Error parsing statement {statement_month}: {str(e)}")
-            # Continue with other statements
-    
+
+    # STEP 2: Transaction Parsing (a failing statement is skipped, others continue)
+    all_raw_transactions, parse_stats = _parse_statements(raw_texts, statement_months, raise_on_error=False)
+
     if not all_raw_transactions:
-        # No transactions parsed - return empty summary
         logger.warning("No transactions successfully parsed from any PDF")
-        
-        return AnalyzeResponse(
-            salary_this_month=current_salary,
-            recurring_expenses=[],
-            total_recurring=0.0,
-            remaining_after_reserve=current_salary,
-            pending_user_labels=[],
-            updated_user_labels=[],
-            data_completeness_warning="ไม่สามารถแยกวิเคราะห์ธุรกรรมจาก PDF ที่ให้มา",
-            data_months_available=0,
-            parsed_transaction_count=0,
-            parse_success_rate=0.0
-        )
-    
-    total_transactions = len(all_raw_transactions)
-    parse_success_rate = 1.0  # Simplified - could track failures
-    
-    logger.info(f"Total transactions parsed: {total_transactions}")
-    
-    # ============================================================
-    # STEP 3: Transaction Normalization
-    # ============================================================
-    logger.info("Step 3: Normalizing transactions")
-    
-    normalizer = TransactionNormalizer()
-    # Use a dummy user_id since we're stateless
-    from uuid import uuid4
-    user_id = uuid4()
-    normalized_transactions = normalizer.normalize_transactions(
-        all_raw_transactions, 
-        user_id
-    )
-    
-    logger.info(f"Normalized {len(normalized_transactions)} transactions")
-    
-    # ============================================================
-    # STEP 4: Categorization
-    # ============================================================
-    logger.info("Step 4: Categorizing transactions")
-    
-    categorizer = CategorizationModule()
-    categorized_transactions = categorizer.categorize_transactions(
-        normalized_transactions,
-        existing_user_labels
-    )
-    
-    logger.info(f"Categorized {len(categorized_transactions)} transactions")
-    
-    # ============================================================
-    # STEP 5: Recurring Pattern Detection
-    # ============================================================
-    logger.info("Step 5: Detecting recurring patterns")
-    
-    detector = RecurringDetectionEngine(detection_config)
-    
-    # Calculate total months from distinct statement months
-    distinct_months = set([tx.source_statement_month for tx in all_raw_transactions])
-    total_months = len(distinct_months)
-    
-    recurring_patterns = detector.detect_recurring_expenses(
-        categorized_transactions,
-        total_months
-    )
-    
-    logger.info(f"Detected {len(recurring_patterns)} patterns")
-    
-    # ============================================================
-    # STEP 6: Amount Forecasting
-    # ============================================================
-    logger.info("Step 6: Forecasting amounts")
-    
-    forecaster = AmountForecastModule(forecast_config)
-    
-    for pattern in recurring_patterns:
-        # Only forecast for actual recurring expenses
-        if pattern.recurring_type in [
-            RecurringType.MONTHLY_FIXED,
-            RecurringType.MONTHLY_VARIABLE,
-            RecurringType.PERIODIC_NON_MONTHLY
-        ]:
-            pattern.forecast_amount = forecaster.forecast_amount(pattern)
-        else:
-            pattern.forecast_amount = 0.0
-    
-    logger.info("Completed amount forecasting")
-    
-    # ============================================================
-    # STEP 7: Generate Summary
-    # ============================================================
-    logger.info("Step 7: Generating summary")
-    
-    aggregator = AggregationService()
-    summary = aggregator.generate_summary(
-        recurring_patterns,
+        return _empty_response(current_salary, NO_TRANSACTIONS_PDF_WARNING)
+
+    return _run_pipeline(
+        all_raw_transactions,
         current_salary,
-        total_months
-    )
-    
-    # ============================================================
-    # STEP 8: Extract updated user labels
-    # ============================================================
-    # For patterns that need labeling but weren't previously labeled,
-    # return them as part of pending labels
-    # User can label them and pass back in next request
-    
-    updated_labels = []
-    # In stateless mode, we don't update labels - just return pending ones
-    # Frontend will handle collecting labels and passing them back
-    
-    # Calculate execution time
-    end_time = datetime.utcnow()
-    execution_time = (end_time - start_time).total_seconds()
-    
-    logger.info(
-        f"Pipeline completed successfully in {execution_time:.2f}s: "
-        f"total_recurring={summary.total_recurring:.2f}, "
-        f"remaining={summary.remaining_after_reserve:.2f}, "
-        f"pending_labels={len(summary.pending_user_labels)}"
-    )
-    
-    # Convert summary to response format
-    return AnalyzeResponse(
-        salary_this_month=summary.salary_this_month,
-        recurring_expenses=[
-            {
-                "category": exp.category,
-                "category_label_th": exp.category_label_th,
-                "amount": exp.amount,
-                "confidence": exp.confidence,
-                "recipient_key": exp.recipient_key
-            }
-            for exp in summary.recurring_expenses
-        ],
-        total_recurring=summary.total_recurring,
-        remaining_after_reserve=summary.remaining_after_reserve,
-        pending_user_labels=[
-            {
-                "recipient_key": label.recipient_key,
-                "detected_amount": label.detected_amount,
-                "n_months_detected": label.n_months_detected,
-                "category_suggestions": label.category_suggestions,
-                "sample_transactions": label.sample_transactions
-            }
-            for label in summary.pending_user_labels
-        ],
-        updated_user_labels=updated_labels,
-        data_completeness_warning=summary.data_completeness_warning,
-        data_months_available=summary.data_months_available,
-        parsed_transaction_count=total_transactions,
-        parse_success_rate=parse_success_rate
+        existing_user_labels or [],
+        detection_config or DetectionConfig(),
+        forecast_config or ForecastConfig(),
+        parse_stats,
     )
 
 
@@ -300,33 +130,23 @@ def analyze_from_base64(
 ) -> Dict[str, Any]:
     """
     Convenience function that accepts base64-encoded PDFs.
-    
-    Args:
-        statements_pdf_base64: List of base64-encoded PDF strings
-        current_salary: User's current month salary
-        existing_user_labels: Existing user category labels
-        
+
     Returns:
         Dict representation of AnalyzeResponse
     """
-    # Decode base64 PDFs to bytes
     pdf_files = []
     for i, pdf_base64 in enumerate(statements_pdf_base64):
         try:
-            pdf_bytes = base64.b64decode(pdf_base64)
-            pdf_files.append(pdf_bytes)
+            pdf_files.append(base64.b64decode(pdf_base64, validate=True))
         except Exception as e:
             logger.error(f"Failed to decode base64 PDF {i+1}: {str(e)}")
             raise ValueError(f"Invalid base64 encoding for PDF {i+1}")
-    
-    # Call main analyze function
+
     response = analyze(
         pdf_files=pdf_files,
         current_salary=current_salary,
         existing_user_labels=existing_user_labels
     )
-    
-    # Convert to dict
     return asdict(response)
 
 
@@ -339,177 +159,217 @@ def analyze_from_text(
     """
     Convenience function that accepts raw statement text directly.
     Skips PDF extraction step - useful when PDF fonts are problematic.
-    
+
     Args:
         statement_texts: List of raw statement text strings (1-6 months)
         current_salary: User's current month salary
         existing_user_labels: Existing user category labels
-        statement_months: List of statement months (if None, uses current month for all)
-        
+        statement_months: Optional override for each statement's month
+
     Returns:
         Dict representation of AnalyzeResponse
+
+    Raises:
+        ValueError: If a statement text cannot be parsed
     """
-    from datetime import date
-    
-    start_time = datetime.utcnow()
-    
-    # Use default configs
-    detection_config = DetectionConfig()
-    forecast_config = ForecastConfig()
-    existing_user_labels = existing_user_labels or []
-    
     logger.info(
         f"Starting text-based pipeline: {len(statement_texts)} texts, "
         f"salary={current_salary:.2f}, "
-        f"existing_labels={len(existing_user_labels)}"
+        f"existing_labels={len(existing_user_labels or [])}"
     )
-    
-    # Generate statement months if not provided
-    if statement_months is None:
-        current_month = date.today().replace(day=1)
-        statement_months = [current_month] * len(statement_texts)
-    
-    # ============================================================
-    # STEP 2: Parse transactions from text (skip PDF extraction)
-    # ============================================================
-    logger.info(f"Step 2: Parsing transactions from {len(statement_texts)} texts")
-    
-    parser = RecordParser()
-    all_transactions = []
-    
-    for i, (text, statement_month) in enumerate(zip(statement_texts, statement_months)):
-        try:
-            transactions = parser.parse_statement_text(text, statement_month)
-            all_transactions.extend(transactions)
-            logger.info(f"Parsed {len(transactions)} transactions from text {i+1}")
-        except Exception as e:
-            logger.error(f"Failed to parse text {i+1}: {e}", exc_info=True)
-            raise ValueError(f"Failed to parse statement text {i+1}: {str(e)}")
-    
-    total_parsed = len(all_transactions)
-    logger.info(f"Parsed total {total_parsed} transactions from {len(statement_texts)} texts")
-    
-    if total_parsed == 0:
+
+    all_transactions, parse_stats = _parse_statements(statement_texts, statement_months, raise_on_error=True)
+
+    if not all_transactions:
         logger.warning("No transactions parsed from statement texts")
-        return _empty_response(current_salary, len(statement_texts), "ไม่สามารถแยกวิเคราะห์ธุรกรรมจากข้อความที่ให้มา")
-    
-    # ============================================================
-    # STEP 3: Normalize transactions
-    # ============================================================
-    logger.info("Step 3: Normalizing transactions")
-    
-    normalizer = TransactionNormalizer()
-    from uuid import uuid4
-    user_id = uuid4()
-    normalized_transactions = normalizer.normalize_transactions(
+        return asdict(_empty_response(current_salary, NO_TRANSACTIONS_TEXT_WARNING))
+
+    response = _run_pipeline(
         all_transactions,
-        user_id
-    )
-    
-    logger.info(f"Normalized {len(normalized_transactions)} transactions")
-    
-    # ============================================================
-    # STEP 4: Categorization
-    # ============================================================
-    logger.info("Step 4: Categorizing transactions")
-    
-    categorizer = CategorizationModule()
-    categorized_transactions = categorizer.categorize_transactions(
-        normalized_transactions,
-        existing_user_labels
-    )
-    
-    logger.info(f"Categorized {len(categorized_transactions)} transactions")
-    
-    # ============================================================
-    # STEP 5: Recurring Detection
-    # ============================================================
-    logger.info("Step 5: Detecting recurring patterns")
-    
-    total_months = len(statement_texts)
-    detector = RecurringDetectionEngine(detection_config)
-    
-    recurring_patterns = detector.detect_recurring_expenses(
-        categorized_transactions,
-        total_months
-    )
-    
-    logger.info(f"Detected {len(recurring_patterns)} patterns")
-    
-    # ============================================================
-    # STEP 6: Amount Forecasting
-    # ============================================================
-    logger.info("Step 6: Forecasting amounts")
-    
-    forecaster = AmountForecastModule(forecast_config)
-    
-    for pattern in recurring_patterns:
-        if pattern.recurring_type in [
-            RecurringType.MONTHLY_FIXED,
-            RecurringType.MONTHLY_VARIABLE,
-            RecurringType.PERIODIC_NON_MONTHLY
-        ]:
-            pattern.forecast_amount = forecaster.forecast_amount(pattern)
-        else:
-            pattern.forecast_amount = 0.0
-    
-    logger.info("Completed amount forecasting")
-    
-    # ============================================================
-    # STEP 7: Generate Summary
-    # ============================================================
-    logger.info("Step 7: Generating summary")
-    
-    aggregator = AggregationService()
-    summary = aggregator.generate_summary(
-        recurring_patterns,
         current_salary,
-        total_months
+        existing_user_labels or [],
+        DetectionConfig(),
+        ForecastConfig(),
+        parse_stats,
     )
-    
-    # ============================================================
-    # STEP 8: Build response
-    # ============================================================
-    updated_labels = []  # Stateless mode
-    
-    # Data completeness warning
-    data_warning = None
-    if total_months < 6:
-        data_warning = f"มีข้อมูลเพียง {total_months} เดือน แนะนำให้ใช้ข้อมูล 6 เดือนเพื่อความแม่นยำสูงสุด"
-    
-    parse_success_rate = 1.0 if total_parsed > 0 else 0.0
-    
-    response = AnalyzeResponse(
-        salary_this_month=current_salary,
+    return asdict(response)
+
+
+def _parse_statements(
+    raw_texts: List[str],
+    statement_months: Optional[List[date]],
+    raise_on_error: bool,
+) -> Tuple[List[RawTransaction], ParseStats]:
+    """
+    Parse every statement text into RawTransactions, with the parser's own
+    account of how much of them it could read.
+
+    Each transaction's source_statement_month is the first day of the month of its
+    own transaction date, unless statement_months overrides it. This is what makes
+    month counting downstream correct: previously every statement was stamped with
+    the current month, so total_months was always 1.
+    """
+    if statement_months is not None and len(statement_months) != len(raw_texts):
+        raise ValueError(
+            f"statement_months has {len(statement_months)} entries "
+            f"but {len(raw_texts)} statements were provided"
+        )
+
+    # Which parser to use is decided from the statements themselves rather than
+    # configured: the person uploading a PDF knows what their bank calls it, not
+    # which of our layouts it matches. One parser serves every statement in the
+    # batch -- they come from one account, so a batch that needs two parsers is
+    # a batch with something wrong in it.
+    parser = _select_parser(raw_texts)
+    all_transactions: List[RawTransaction] = []
+
+    for i, raw_text in enumerate(raw_texts):
+        override_month = statement_months[i] if statement_months else None
+        placeholder = override_month or date.today().replace(day=1)
+        try:
+            transactions = parser.parse_statement_text(raw_text, placeholder)
+        except Exception as e:
+            logger.error(f"Failed to parse statement {i+1}: {e}", exc_info=True)
+            if raise_on_error:
+                raise ValueError(f"Failed to parse statement text {i+1}: {str(e)}")
+            continue
+
+        if override_month is None:
+            for tx in transactions:
+                tx.source_statement_month = tx.date.replace(day=1)
+
+        all_transactions.extend(transactions)
+        logger.info(f"Parsed {len(transactions)} transactions from statement {i+1}")
+
+    return all_transactions, parser.stats
+
+
+def _select_parser(raw_texts: List[str]):
+    """
+    Pick the parser whose layout these statements match.
+
+    Defaults to the K PLUS parser, which is the one that has to work.
+    Recognising the columnar layout takes positive evidence -- two rows that
+    parse -- so an unfamiliar statement falls back to the original behaviour
+    and its original diagnostics rather than being handed to a parser that
+    would reject it for a different reason.
+    """
+    if any(looks_like_columnar(text) for text in raw_texts):
+        logger.info("Statement format: columnar (date / description / amount / balance)")
+        return ColumnarStatementParser()
+
+    logger.info("Statement format: K PLUS")
+
+    return RecordParser()
+
+
+def _run_pipeline(
+    raw_transactions: List[RawTransaction],
+    current_salary: float,
+    existing_user_labels: List[dict],
+    detection_config: DetectionConfig,
+    forecast_config: ForecastConfig,
+    parse_stats: Optional[ParseStats] = None,
+) -> AnalyzeResponse:
+    """
+    Shared steps 3-8: normalize -> categorize -> detect -> forecast -> aggregate -> respond.
+    """
+    start_time = datetime.now()
+    total_transactions = len(raw_transactions)
+    parse_success_rate = parse_stats.success_rate if parse_stats else 1.0
+    logger.info(
+        f"Total transactions parsed: {total_transactions} "
+        f"(success rate {parse_success_rate:.0%})"
+    )
+
+    # STEP 3: Normalization (dummy user_id: stateless)
+    logger.info("Step 3: Normalizing transactions")
+    normalized_transactions = TransactionNormalizer().normalize_transactions(
+        raw_transactions, uuid4()
+    )
+
+    # STEP 4: Categorization
+    logger.info("Step 4: Categorizing transactions")
+    categorized_transactions = CategorizationModule().categorize_transactions(
+        normalized_transactions, existing_user_labels
+    )
+
+    # STEP 5: Recurring Pattern Detection
+    # total_months is the number of distinct calendar months covered by the actual
+    # transaction dates. It must never come from the statement count or a placeholder.
+    total_months = len({(tx.date.year, tx.date.month) for tx in raw_transactions})
+    logger.info(f"Step 5: Detecting recurring patterns over {total_months} month(s) of data")
+
+    detector = RecurringDetectionEngine(detection_config)
+    recurring_patterns = detector.detect_recurring_expenses(categorized_transactions, total_months)
+    logger.info(f"Detected {len(recurring_patterns)} patterns")
+
+    # STEP 6: Amount Forecasting
+    logger.info("Step 6: Forecasting amounts")
+    forecaster = AmountForecastModule(forecast_config)
+    forecastable = {
+        RecurringType.MONTHLY_FIXED,
+        RecurringType.MONTHLY_VARIABLE,
+        RecurringType.PERIODIC_NON_MONTHLY,
+    }
+    for pattern in recurring_patterns:
+        pattern.forecast_amount = (
+            forecaster.forecast_amount(pattern) if pattern.recurring_type in forecastable else 0.0
+        )
+
+    # STEP 7: Summary
+    logger.info("Step 7: Generating summary")
+    summary = AggregationService().generate_summary(recurring_patterns, current_salary, total_months)
+
+    # STEP 7.5: Cash-flow signals
+    # Runs here because this is the only point where the raw transactions, the
+    # unfiltered patterns and the month count are all still in scope. The
+    # summary above keeps what is committed; this keeps what is happening.
+    logger.info("Step 7.5: Deriving cashflow signals")
+    cashflow = derive_cashflow_signals(
+        raw_transactions, categorized_transactions, recurring_patterns, total_months
+    )
+
+    # STEP 8: Response (stateless: updated_user_labels always empty; frontend collects labels)
+    elapsed = (datetime.now() - start_time).total_seconds()
+    logger.info(
+        f"Pipeline completed in {elapsed:.2f}s: "
+        f"total_recurring={summary.total_recurring:.2f}, "
+        f"remaining={summary.remaining_after_reserve:.2f}, "
+        f"pending_labels={len(summary.pending_user_labels)}"
+    )
+
+    return AnalyzeResponse(
+        salary_this_month=summary.salary_this_month,
         recurring_expenses=[asdict(item) for item in summary.recurring_expenses],
         total_recurring=summary.total_recurring,
         remaining_after_reserve=summary.remaining_after_reserve,
         pending_user_labels=[asdict(item) for item in summary.pending_user_labels],
-        updated_user_labels=updated_labels,
-        data_completeness_warning=data_warning,
-        data_months_available=total_months,
-        parsed_transaction_count=total_parsed,
-        parse_success_rate=parse_success_rate
+        updated_user_labels=[],
+        data_completeness_warning=summary.data_completeness_warning,
+        data_months_available=summary.data_months_available,
+        parsed_transaction_count=total_transactions,
+        parse_success_rate=parse_success_rate,
+        closing_balance=cashflow.closing_balance,
+        observed_income=cashflow.observed_income,
+        income_months=cashflow.income_months,
+        payday_day_of_month=cashflow.payday_day_of_month,
+        variable_spend_monthly=cashflow.variable_spend_monthly,
+        avg_daily_spend=cashflow.avg_daily_spend,
     )
-    
-    elapsed = (datetime.utcnow() - start_time).total_seconds()
-    logger.info(f"Text-based pipeline completed in {elapsed:.2f}s")
-    
-    return asdict(response)
 
 
-def _empty_response(salary: float, months: int, warning: str) -> Dict[str, Any]:
-    """Generate empty response when no data parsed"""
-    return {
-        "salary_this_month": salary,
-        "recurring_expenses": [],
-        "total_recurring": 0.0,
-        "remaining_after_reserve": salary,
-        "pending_user_labels": [],
-        "updated_user_labels": [],
-        "data_completeness_warning": warning,
-        "data_months_available": months,
-        "parsed_transaction_count": 0,
-        "parse_success_rate": 0.0
-    }
-
+def _empty_response(salary: float, warning: str) -> AnalyzeResponse:
+    """Response when no transactions could be parsed"""
+    return AnalyzeResponse(
+        salary_this_month=salary,
+        recurring_expenses=[],
+        total_recurring=0.0,
+        remaining_after_reserve=salary,
+        pending_user_labels=[],
+        updated_user_labels=[],
+        data_completeness_warning=warning,
+        data_months_available=0,
+        parsed_transaction_count=0,
+        parse_success_rate=0.0,
+    )
